@@ -4,6 +4,7 @@ import socket
 import sys
 import struct
 import json
+import datetime
 
 HOST = 'localhost'
 PORT = 9099
@@ -13,6 +14,7 @@ s.connect((HOST, PORT))
 
 # Token (BSTO)
 token = 0x4f545342
+sequence = 0 
 
 # Packet types
 packet_type_enum = dict(
@@ -34,7 +36,12 @@ type_pong = 10
 type_json = 20
 type_error = 254
 
+def timestamp():
+    return datetime.datetime.utcnow().strftime('%Y%m%dT%H:%M:%S')
+
 def pack(data):
+    global sequence
+    sequence = sequence+1
     data = list(data)
     length = len(data)
     args = [token, sequence, packet_type_enum['json'], length]+ data
@@ -63,13 +70,11 @@ data = {
     'command': 'register',
     'from': '',
     'id': '50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D',
-    'timestamp': '20130120T22:23:47',
+    'timestamp': timestamp(),
     'to': '',
     'type': 'client',
 }
 json_data = list(json.dumps(data))
-
-sequence = 15
 
 # Header + JSON body:
 # unsigned 32 token
@@ -78,26 +83,95 @@ sequence = 15
 # unsigned 32 length
 # char * json 
 
-#length = len(json_data)
-#args = [token, sequence, type_json, length]+ json_data
-#packet = struct.pack('>LHHI%dc' % len(json_data), *args)
-#s.send(packet)
-#fh = open('sent.packet', 'w')
-#fh.write(packet)
-#fh.close()
 packet = pack(json.dumps(data))
 s.send(packet)
 
 # Expect an ACK packet back
 response = s.recv(1024)
+print '%r' % unpack(response)
 fh = open('recv.packet', 'w')
 fh.write(response)
 fh.close()
-print '%r' % unpack(response)
+
+# Attempt to announce our presence?
+if True:
+    packet = pack(json.dumps(
+        {
+            'attributes': {
+                'username': sys.argv[1],
+            },
+            "type":"presence",
+            "command":"push",
+            "id":"50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D",
+            "timestamp":timestamp(),
+            "to":"spditner@opentop.org",
+            "from":"nlrentid@opentop.org",
+            "attributes": {
+                "status":"away",
+                "message":"Out to lunch..."
+            }
+        }
+    ))
+    s.send(packet)
+    response = s.recv(1024)
+    print '%r' % unpack(response)
+
+# Attempt to subscribe to someone's presence
+if False:
+    packet = pack(json.dumps(
+    {
+        "type":"presence",
+        "command":"subscribe",
+        "id":"50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D",
+        "timestamp":timestamp(),
+        "to":"spditner@opentop.org",
+        "from":"nlrentid@opentop.org",
+    }
+    ))
+    s.send(packet)
+    response = s.recv(1024)
+    print '%r' % unpack(response)
+
+# Attempt to call someone
+if False:
+    packet = pack(json.dumps(
+        {
+            'attributes': {
+                'username': sys.argv[1],
+            },
+            "type":  "call",
+            "command": "offer",
+            "id": "50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D",
+            "timestamp": timestamp(),
+            "to": "spditner@opentop.org",
+            "from" : "nlrentid@opentop.org",
+            "attributes":  {
+                "sdp ": "",
+            }
+        }
+    ))
+    s.send(packet)
+    response = s.recv(1024)
+    print '%r' % unpack(response)
 
 # okay... never received a response to say whether authentication was successful
-while 1:
+
+# Logout
+if True:
+    packet = pack(json.dumps({
+        "type": "client",
+        "command": "unregister",
+        "id": "50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D",
+        "timestamp": timestamp(),
+        "to": "",
+        "from": "",
+        "attributes": {
+            "username": "nlrentid@opentop.org",
+        },
+    }))
+    s.send(packet)
     response = s.recv(1024)
-    if response:
-        print "Received a response"
+    print '%r' % unpack(response)
+
+
 s.close()
