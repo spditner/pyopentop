@@ -16,6 +16,30 @@ s.connect((HOST, PORT))
 token = 0x4f545342
 sequence = 0 
 
+test_sdp = """v=0
+o=- 3206655683 2 IN IP4 127.0.0.1
+s=-
+t=0 0
+a=group:BUNDLE audio
+m=audio 1 RTP/SAVPF 9 0 8 126 
+c=IN IP4 0.0.0.0
+a=rtcp:1 IN IP4 0.0.0.0
+a=ice-ufrag:FAXdCWAGMBXKHbdD
+a=ice-pwd:9dUaqGYFW2rYnLCaGP5bEaEa
+a=sendrecv
+a=mid:audio
+a=rtcp-mux
+a=crypto:0 AES_CM_128_HMAC_SHA1_32 inline:c2tBZFVmR1U0WkhETEQ5OXA4VVViZDhCd3VmRDJH
+a=rtpmap:9 g722/8000
+a=rtpmap:0 PCMU/8000
+a=rtpmap:8 PCMA/8000
+a=rtpmap:126 telephone-event/8000
+a=ssrc:3192024668 cname:y48aubLGfmT0Fl+0
+a=ssrc:3192024668 mslabel:kmGQZMjt0XfTlkH7IWMqPguDlCsykGUEMpF8
+a=ssrc:3192024668 label:kmGQZMjt0XfTlkH7IWMqPguDlCsykGUEMpF800
+a=candidate:2756956640 1 udp 2130706431 192.168.1.254 58888 typ host generation 0
+a=candidate:2756956640 2 udp 2130706431 192.168.1.254 58888 typ host generation 0"""
+
 # Packet types
 packet_type_enum = dict(
     none = 0,
@@ -40,6 +64,14 @@ def timestamp():
     return datetime.datetime.utcnow().strftime('%Y%m%dT%H:%M:%S')
 
 def pack(data):
+# Header + JSON body:
+# unsigned 32 token
+# unsigned 16 sequence
+# unsigned 16 type
+# unsigned 32 length
+# char * json 
+
+    print "Packing:\n%r" % data
     global sequence
     sequence = sequence+1
     data = list(data)
@@ -62,39 +94,37 @@ def unpack(data):
     }
         
     
-data = {
-    'attributes': {
-        'username': sys.argv[1],
-        'password': sys.argv[2],
-    },
-    'command': 'register',
-    'from': '',
-    'id': '50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D',
-    'timestamp': timestamp(),
-    'to': '',
-    'type': 'client',
-}
-json_data = list(json.dumps(data))
+# Log in
+if True:
+    data = {
+        'attributes': {
+            'username': sys.argv[1],
+            'password': sys.argv[2],
+        },
+        'command': 'register',
+        'from': '',
+        'id': '50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D',
+        'timestamp': timestamp(),
+        'to': '',
+        'type': 'client',
+    }
+    json_data = list(json.dumps(data))
 
-# Header + JSON body:
-# unsigned 32 token
-# unsigned 16 sequence
-# unsigned 16 type
-# unsigned 32 length
-# char * json 
+    packet = pack(json.dumps(data))
+    s.send(packet)
+    fh = open("send.packet", "w")
+    fh.write(packet)
+    fh.close()
 
-packet = pack(json.dumps(data))
-s.send(packet)
-
-# Expect an ACK packet back
-response = s.recv(1024)
-print '%r' % unpack(response)
-fh = open('recv.packet', 'w')
-fh.write(response)
-fh.close()
+    # Expect an ACK packet back
+    response = s.recv(1024)
+    print '%r' % unpack(response)
+    fh = open('recv.packet', 'w')
+    fh.write(response)
+    fh.close()
 
 # Attempt to announce our presence?
-if True:
+if False:
     packet = pack(json.dumps(
         {
             'attributes': {
@@ -120,6 +150,9 @@ if True:
 if False:
     packet = pack(json.dumps(
     {
+        'attributes': {
+            'username': sys.argv[1],
+        },
         "type":"presence",
         "command":"subscribe",
         "id":"50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D",
@@ -133,20 +166,18 @@ if False:
     print '%r' % unpack(response)
 
 # Attempt to call someone
-if False:
+if True:
     packet = pack(json.dumps(
         {
-            'attributes': {
-                'username': sys.argv[1],
-            },
             "type":  "call",
             "command": "offer",
             "id": "50Bp6LxQFBD4ZFVq40F3w0fFlJbxUZ4D",
             "timestamp": timestamp(),
-            "to": "spditner@opentop.org",
+            "to": "testcall@opentop.org",
             "from" : "nlrentid@opentop.org",
             "attributes":  {
-                "sdp ": "",
+                'username': sys.argv[1],
+                "sdp ": test_sdp,
             }
         }
     ))
@@ -157,7 +188,7 @@ if False:
 # okay... never received a response to say whether authentication was successful
 
 # Logout
-if True:
+if False:
     packet = pack(json.dumps({
         "type": "client",
         "command": "unregister",
@@ -173,5 +204,7 @@ if True:
     response = s.recv(1024)
     print '%r' % unpack(response)
 
+response = s.recv(1024)
+print '%r' % unpack(response)
 
 s.close()
